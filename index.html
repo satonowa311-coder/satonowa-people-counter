@@ -3,52 +3,102 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#111827" />
-  <title>さとのわ 人数カウンター TEST</title>
+  <meta name="theme-color" content="#0f172a" />
+  <title>さとのわ 小規模カウンター V1</title>
+
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+
   <style>
     :root{
       --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#f8fafc;
-      --muted:#94a3b8; --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --accent:#38bdf8;
+      --muted:#94a3b8; --good:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+      --accent:#38bdf8; --line:#f59e0b;
     }
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif}
-    .wrap{max-width:900px;margin:auto;padding:12px}
-    h1{font-size:20px;margin:4px 0 10px}
+    body{
+      margin:0;background:var(--bg);color:var(--text);
+      font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif
+    }
+    .wrap{max-width:920px;margin:auto;padding:12px}
+    h1{font-size:21px;margin:4px 0 10px}
+    h2{font-size:16px;margin:0 0 10px}
     .badge{font-size:12px;background:#334155;padding:3px 8px;border-radius:999px;color:#e2e8f0}
+    .panel{background:var(--panel);padding:12px;border-radius:14px;margin-top:10px}
     .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
     .card{background:var(--panel);padding:12px;border-radius:14px;text-align:center}
     .label{font-size:12px;color:var(--muted)}
     .num{font-size:34px;font-weight:800;line-height:1.1;margin-top:4px}
-    .camera{position:relative;background:#000;border-radius:16px;overflow:hidden;aspect-ratio:4/3}
+    .field{margin:8px 0}
+    .field label{display:block;color:#cbd5e1;font-size:13px;margin-bottom:5px}
+    input[type=text], select{
+      width:100%;border:1px solid #334155;border-radius:10px;
+      padding:11px;background:#0b1220;color:#fff;font:inherit
+    }
+    input[type=range]{width:100%}
+    .camera{
+      position:relative;background:#000;border-radius:16px;overflow:hidden;
+      aspect-ratio:4/3;margin-top:10px
+    }
     video,canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-    .line{position:absolute;left:0;right:0;top:55%;height:3px;background:#f59e0b;box-shadow:0 0 0 1px #0008}
-    .line::after{content:"判定ライン";position:absolute;right:6px;top:-24px;background:#000a;color:#fff;padding:2px 6px;border-radius:6px;font-size:11px}
+    .hint{
+      position:absolute;left:8px;top:8px;background:#000a;color:#fff;
+      border-radius:8px;padding:5px 8px;font-size:12px;pointer-events:none
+    }
     .controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
-    button,select,input{font:inherit}
-    button{border:0;border-radius:12px;padding:13px 10px;font-weight:700}
+    button{
+      border:0;border-radius:12px;padding:13px 10px;font-weight:700;font:inherit
+    }
     .primary{background:var(--good);color:#052e16}
     .secondary{background:#334155;color:#fff}
     .warn{background:var(--warn);color:#3b2200}
-    .danger{background:var(--bad);color:white}
+    .danger{background:var(--bad);color:#fff}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
-    .settings{background:var(--panel);border-radius:14px;padding:12px;margin-top:10px}
-    .settings label{display:block;margin:8px 0;color:#cbd5e1;font-size:14px}
-    input[type=range]{width:100%}
-    .status{font-size:13px;color:#cbd5e1;margin:10px 0 0}
-    .log{background:var(--panel);border-radius:14px;margin-top:10px;padding:12px}
-    .log h2{font-size:15px;margin:0 0 8px}
+    .row > button{flex:1;min-width:140px}
+    .status{font-size:13px;color:#cbd5e1;line-height:1.5;margin-top:8px}
+    .notice{
+      background:#172554;border:1px solid #1d4ed8;color:#dbeafe;
+      padding:10px;border-radius:12px;margin-top:10px;font-size:13px;line-height:1.6
+    }
     table{width:100%;border-collapse:collapse;font-size:13px}
     th,td{border-bottom:1px solid #334155;padding:7px;text-align:left}
-    .tiny{font-size:12px;color:var(--muted);line-height:1.5}
-    .notice{background:#172554;border:1px solid #1d4ed8;color:#dbeafe;padding:10px;border-radius:12px;margin-top:10px;font-size:13px}
-    @media(max-width:560px){.num{font-size:28px}.wrap{padding:8px}}
+    .tiny{font-size:12px;color:var(--muted);line-height:1.6}
+    .mode-help{
+      font-size:12px;color:#cbd5e1;background:#0b1220;padding:8px;border-radius:10px;margin-top:8px
+    }
+    .summary-empty{color:var(--muted);font-size:13px}
+    @media(max-width:560px){
+      .num{font-size:28px}
+      .wrap{padding:8px}
+    }
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>さとのわ 人数カウンター <span class="badge">TEST</span></h1>
+  <h1>さとのわ 小規模カウンター <span class="badge">V1</span></h1>
+
+  <div class="panel">
+    <div class="field">
+      <label for="eventName">イベント名</label>
+      <input id="eventName" type="text" placeholder="例：さとのわ子ども食堂">
+    </div>
+
+    <div class="field">
+      <label for="mode">設置モード</label>
+      <select id="mode">
+        <option value="front">正面</option>
+        <option value="diagonal" selected>斜め正面</option>
+        <option value="side">横向き</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="direction">入場方向</label>
+      <select id="direction"></select>
+    </div>
+
+    <div id="modeHelp" class="mode-help"></div>
+  </div>
 
   <div class="grid">
     <div class="card"><div class="label">入場</div><div id="inCount" class="num">0</div></div>
@@ -59,275 +109,635 @@
   <div class="camera">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
-    <div id="judgeLine" class="line"></div>
+    <div id="cameraHint" class="hint">人物検出：待機中</div>
   </div>
 
   <div class="controls">
-    <button id="startBtn" class="primary">カメラ開始</button>
+    <button id="startBtn" class="primary">カウント開始</button>
     <button id="stopBtn" class="secondary">停止</button>
-    <button id="plusBtn" class="secondary">＋1 手動補正</button>
-    <button id="minusBtn" class="secondary">－1 手動補正</button>
+    <button id="plusBtn" class="secondary">入場 ＋1</button>
+    <button id="minusBtn" class="secondary">入場 －1</button>
   </div>
 
-  <div class="settings">
-    <label>判定ライン位置：<span id="lineLabel">55</span>%</label>
-    <input id="lineRange" type="range" min="20" max="80" value="55">
+  <div class="panel">
+    <h2>判定調整</h2>
 
-    <label>入場方向</label>
-    <select id="direction">
-      <option value="down">上 → 下 が入場</option>
-      <option value="up">下 → 上 が入場</option>
-    </select>
+    <div class="field">
+      <label>判定ライン位置：<span id="lineLabel">68</span>%</label>
+      <input id="lineRange" type="range" min="15" max="85" value="68">
+    </div>
 
-    <label>AI信頼度：<span id="scoreLabel">55</span>%</label>
-    <input id="scoreRange" type="range" min="30" max="90" value="55">
+    <div class="field">
+      <label>AI人物判定の信頼度：<span id="scoreLabel">50</span>%</label>
+      <input id="scoreRange" type="range" min="30" max="90" value="50">
+    </div>
 
-    <div id="status" class="status">準備中：AIモデルを読み込みます。</div>
+    <div id="status" class="status">AIモデルを読み込み中です。</div>
+  </div>
+
+  <div class="panel">
+    <h2>30分ごとの入場人数</h2>
+    <div id="timeSummary" class="summary-empty">まだ記録がありません。</div>
   </div>
 
   <div class="row">
     <button id="csvBtn" class="secondary">CSV保存</button>
-    <button id="resetBtn" class="danger">今日の記録をリセット</button>
+    <button id="resetBtn" class="danger">記録をリセット</button>
   </div>
 
   <div class="notice">
-    このテスト版は顔認識をしません。映像・顔画像は保存せず、端末上で人物検出して「通過時刻」と人数だけを保存します。
+    <strong>V1の方針：</strong>
+    顔認証は行いません。映像や顔画像は保存せず、端末上で人物を検出して、
+    通過時刻・入退場・人数だけを保存します。100人程度までの小規模イベントで実証する想定です。
   </div>
 
-  <div class="log">
+  <div class="panel">
     <h2>最近の通過記録</h2>
     <table>
-      <thead><tr><th>時刻</th><th>方向</th><th>累計</th></tr></thead>
+      <thead><tr><th>時刻</th><th>種別</th><th>入場累計</th></tr></thead>
       <tbody id="logBody"></tbody>
     </table>
   </div>
 
   <p class="tiny">
-    ※ カメラはHTTPS（GitHub Pagesなど）で開く必要があります。<br>
-    ※ 混雑・すれ違い・子どもが大人の陰に隠れる場合は誤差が出ます。まずは実人数と比較して精度を確認してください。
+    ※ HTTPS（GitHub Pagesなど）で開いてください。<br>
+    ※ 人が重なった場合、同じ場所を行き来した場合、暗所では誤差が出ます。<br>
+    ※ 実証時は実人数も別に記録し、「実人数－アプリ人数」の誤差を残してください。
   </p>
 </div>
 
 <script>
 (() => {
-  const video = document.getElementById('video');
-  const canvas = document.getElementById('overlay');
-  const ctx = canvas.getContext('2d');
-  const startBtn = document.getElementById('startBtn');
-  const stopBtn = document.getElementById('stopBtn');
-  const plusBtn = document.getElementById('plusBtn');
-  const minusBtn = document.getElementById('minusBtn');
-  const resetBtn = document.getElementById('resetBtn');
-  const csvBtn = document.getElementById('csvBtn');
-  const lineRange = document.getElementById('lineRange');
-  const lineLabel = document.getElementById('lineLabel');
-  const judgeLine = document.getElementById('judgeLine');
-  const scoreRange = document.getElementById('scoreRange');
-  const scoreLabel = document.getElementById('scoreLabel');
-  const direction = document.getElementById('direction');
-  const statusEl = document.getElementById('status');
+  const $ = id => document.getElementById(id);
 
-  let model = null, stream = null, running = false;
-  let counts = JSON.parse(localStorage.getItem('satonowa-counter-counts') || '{"in":0,"out":0}');
-  let logs = JSON.parse(localStorage.getItem('satonowa-counter-logs') || '[]');
+  const video = $('video');
+  const canvas = $('overlay');
+  const ctx = canvas.getContext('2d');
+
+  const eventName = $('eventName');
+  const mode = $('mode');
+  const direction = $('direction');
+  const modeHelp = $('modeHelp');
+
+  const startBtn = $('startBtn');
+  const stopBtn = $('stopBtn');
+  const plusBtn = $('plusBtn');
+  const minusBtn = $('minusBtn');
+  const resetBtn = $('resetBtn');
+  const csvBtn = $('csvBtn');
+
+  const lineRange = $('lineRange');
+  const lineLabel = $('lineLabel');
+  const scoreRange = $('scoreRange');
+  const scoreLabel = $('scoreLabel');
+  const statusEl = $('status');
+  const cameraHint = $('cameraHint');
+
+  const STORAGE_KEY = 'satonowa-small-counter-v1';
+
+  let model = null;
+  let stream = null;
+  let running = false;
+  let detecting = false;
+
+  let state = loadState();
   let tracks = [];
   let nextId = 1;
-  let lastDetect = 0;
-  const DETECT_MS = 280;
-  const TRACK_TTL = 1500;
-  const MATCH_DISTANCE = 120;
-  const COOLDOWN = 2500;
+  let lastDetectAt = 0;
 
-  function persist(){
-    localStorage.setItem('satonowa-counter-counts', JSON.stringify(counts));
-    localStorage.setItem('satonowa-counter-logs', JSON.stringify(logs.slice(-500)));
+  const DETECT_INTERVAL_MS = 220;
+  const TRACK_TTL_MS = 1800;
+  const CROSS_COOLDOWN_MS = 2200;
+
+  function defaultState(){
+    return {
+      eventName:'',
+      mode:'diagonal',
+      direction:'near',
+      line:68,
+      score:50,
+      counts:{in:0,out:0},
+      logs:[]
+    };
   }
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? Object.assign(defaultState(), JSON.parse(raw)) : defaultState();
+    }catch(e){
+      return defaultState();
+    }
+  }
+
+  function saveState(){
+    state.eventName = eventName.value.trim();
+    state.mode = mode.value;
+    state.direction = direction.value;
+    state.line = Number(lineRange.value);
+    state.score = Number(scoreRange.value);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function setDirectionOptions(){
+    const current = state.direction || direction.value;
+
+    if(mode.value === 'side'){
+      direction.innerHTML = `
+        <option value="right">左 → 右 が入場</option>
+        <option value="left">右 → 左 が入場</option>
+      `;
+      if(['right','left'].includes(current)) direction.value = current;
+      else direction.value = 'right';
+
+      modeHelp.textContent =
+        '横向き：人が画面を左右に横切る設置向け。黄色い縦ラインを越えた時に数えます。';
+    } else {
+      direction.innerHTML = `
+        <option value="near">奥 → 手前 が入場</option>
+        <option value="far">手前 → 奥 が入場</option>
+      `;
+      if(['near','far'].includes(current)) direction.value = current;
+      else direction.value = 'near';
+
+      modeHelp.textContent =
+        mode.value === 'front'
+          ? '正面：人がカメラに近づく設置向け。人物の足元が黄色い横ラインを越えた時に数えます。'
+          : '斜め正面：玄関など、斜め前から人が近づく設置向け。人物の足元で通過を判定します。';
+    }
+    state.direction = direction.value;
+    saveState();
+  }
+
   function render(){
-    document.getElementById('inCount').textContent = counts.in;
-    document.getElementById('outCount').textContent = counts.out;
-    document.getElementById('insideCount').textContent = Math.max(0, counts.in - counts.out);
-    const body = document.getElementById('logBody');
-    body.innerHTML = logs.slice(-10).reverse().map(x =>
-      `<tr><td>${x.time}</td><td>${x.type}</td><td>${x.total}</td></tr>`
+    $('inCount').textContent = state.counts.in;
+    $('outCount').textContent = state.counts.out;
+    $('insideCount').textContent = Math.max(0, state.counts.in - state.counts.out);
+
+    const body = $('logBody');
+    body.innerHTML = state.logs.slice(-10).reverse().map(x =>
+      `<tr><td>${escapeHtml(x.time)}</td><td>${escapeHtml(x.type)}</td><td>${x.total}</td></tr>`
     ).join('');
+
+    renderTimeSummary();
   }
-  function addEvent(kind, manual=false){
-    if(kind === 'in') counts.in++;
-    else counts.out++;
+
+  function renderTimeSummary(){
+    const rows = makeTimeSummary();
+    const box = $('timeSummary');
+
+    if(!rows.length){
+      box.className = 'summary-empty';
+      box.textContent = 'まだ記録がありません。';
+      return;
+    }
+
+    box.className = '';
+    box.innerHTML = `
+      <table>
+        <thead><tr><th>時間帯</th><th>入場</th></tr></thead>
+        <tbody>
+          ${rows.map(r => `<tr><td>${r.label}</td><td>${r.count}人</td></tr>`).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function escapeHtml(s){
+    return String(s)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
+  }
+
+  function addLog(kind, manual=false, correction=false){
     const now = new Date();
-    logs.push({
+
+    if(correction){
+      state.counts.in = Math.max(0, state.counts.in - 1);
+    } else if(kind === 'in'){
+      state.counts.in += 1;
+    } else if(kind === 'out'){
+      state.counts.out += 1;
+    }
+
+    let type = '';
+    if(correction) type = '入場－1（手動補正）';
+    else if(kind === 'in') type = '入場' + (manual ? '（手動）' : '');
+    else type = '退出' + (manual ? '（手動）' : '');
+
+    state.logs.push({
       iso: now.toISOString(),
+      localDate: localDateKey(now),
       time: now.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
-      type: (kind === 'in' ? '入場' : '退出') + (manual ? '（手動）' : ''),
-      total: counts.in
+      type,
+      kind: correction ? 'correction' : kind,
+      manual: !!manual,
+      total: state.counts.in
     });
-    persist(); render();
+
+    if(state.logs.length > 2000) state.logs = state.logs.slice(-2000);
+    saveState();
+    render();
   }
+
+  function localDateKey(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function halfHourBucket(iso){
+    const d = new Date(iso);
+    const h = d.getHours();
+    const m = d.getMinutes() < 30 ? 0 : 30;
+    const start = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    const endD = new Date(d);
+    endD.setMinutes(m + 30, 0, 0);
+    const end = `${String(endD.getHours()).padStart(2,'0')}:${String(endD.getMinutes()).padStart(2,'0')}`;
+    return `${start}〜${end}`;
+  }
+
+  function makeTimeSummary(){
+    const map = new Map();
+    for(const x of state.logs){
+      if(x.kind !== 'in') continue;
+      const key = halfHourBucket(x.iso);
+      map.set(key, (map.get(key) || 0) + 1);
+    }
+    return [...map.entries()].map(([label,count]) => ({label,count}));
+  }
+
+  function applyStateToUI(){
+    eventName.value = state.eventName || '';
+    mode.value = state.mode || 'diagonal';
+    lineRange.value = state.line ?? 68;
+    scoreRange.value = state.score ?? 50;
+    lineLabel.textContent = lineRange.value;
+    scoreLabel.textContent = scoreRange.value;
+    setDirectionOptions();
+
+    if(state.direction){
+      const opt = [...direction.options].find(o => o.value === state.direction);
+      if(opt) direction.value = state.direction;
+    }
+  }
+
+  eventName.addEventListener('input', saveState);
+
+  mode.addEventListener('change', () => {
+    state.mode = mode.value;
+    setDirectionOptions();
+    tracks = [];
+    draw([]);
+  });
+
+  direction.addEventListener('change', () => {
+    state.direction = direction.value;
+    saveState();
+  });
 
   lineRange.addEventListener('input', () => {
     lineLabel.textContent = lineRange.value;
-    judgeLine.style.top = lineRange.value + '%';
+    state.line = Number(lineRange.value);
+    saveState();
+    draw([]);
   });
-  scoreRange.addEventListener('input', () => scoreLabel.textContent = scoreRange.value);
 
-  plusBtn.onclick = () => addEvent('in', true);
-  minusBtn.onclick = () => {
-    if(counts.in > 0) counts.in--;
-    const now = new Date();
-    logs.push({
-      iso: now.toISOString(),
-      time: now.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
-      type: '入場－1（手動補正）',
-      total: counts.in
-    });
-    persist(); render();
-  };
+  scoreRange.addEventListener('input', () => {
+    scoreLabel.textContent = scoreRange.value;
+    state.score = Number(scoreRange.value);
+    saveState();
+  });
+
+  plusBtn.onclick = () => addLog('in', true, false);
+  minusBtn.onclick = () => addLog('in', true, true);
 
   resetBtn.onclick = () => {
-    if(!confirm('今日の人数と通過記録を0に戻しますか？')) return;
-    counts = {in:0,out:0}; logs = []; tracks = [];
-    persist(); render();
+    if(!confirm('このイベントの人数と通過記録を0に戻しますか？')) return;
+    state.counts = {in:0,out:0};
+    state.logs = [];
+    tracks = [];
+    saveState();
+    render();
   };
 
   csvBtn.onclick = () => {
-    const rows = [['日時','種別','入場累計'], ...logs.map(x => [x.iso,x.type,x.total])];
-    const csv = '\ufeff' + rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const summary = makeTimeSummary();
+    const safeName = (eventName.value.trim() || 'event').replace(/[\\/:*?"<>|]/g,'_');
+
+    const rows = [
+      ['イベント名', eventName.value.trim() || '未入力'],
+      ['設置モード', modeText()],
+      ['入場人数', state.counts.in],
+      ['退出人数', state.counts.out],
+      ['現在推定', Math.max(0, state.counts.in - state.counts.out)],
+      [],
+      ['30分ごとの入場人数'],
+      ['時間帯','入場人数'],
+      ...summary.map(x => [x.label, x.count]),
+      [],
+      ['通過記録'],
+      ['日時','種別','入場累計'],
+      ...state.logs.map(x => [x.iso, x.type, x.total])
+    ];
+
+    const csv = '\ufeff' + rows
+      .map(r => r.map(v => `"${String(v ?? '').replace(/"/g,'""')}"`).join(','))
+      .join('\n');
+
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `satonowa_counter_${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `${safeName}_${localDateKey(new Date())}.csv`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
+
+  function modeText(){
+    if(mode.value === 'front') return '正面';
+    if(mode.value === 'side') return '横向き';
+    return '斜め正面';
+  }
 
   async function loadModel(){
     if(model) return;
     statusEl.textContent = 'AIモデル読み込み中…';
     model = await cocoSsd.load({base:'lite_mobilenet_v2'});
-    statusEl.textContent = 'AI準備完了。カメラ開始を押してください。';
+    statusEl.textContent = 'AI準備完了。「カウント開始」を押してください。';
   }
 
   async function start(){
     try{
-      await loadModel();
+      if(running) return;
+
+      statusEl.textContent = 'カメラを起動しています…';
+
       stream = await navigator.mediaDevices.getUserMedia({
-        video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}},
+        video:{
+          facingMode:{ideal:'environment'},
+          width:{ideal:1280},
+          height:{ideal:720}
+        },
         audio:false
       });
+
       video.srcObject = stream;
       await video.play();
+
+      await loadModel();
+
       running = true;
       tracks = [];
-      statusEl.textContent = 'カウント中。玄関を通ってテストしてください。';
+      nextId = 1;
+      statusEl.textContent = 'カウント中です。人物が判定ラインを越えると記録します。';
       requestAnimationFrame(loop);
+
     }catch(e){
       console.error(e);
-      statusEl.textContent = 'カメラを開始できません。HTTPS・カメラ許可を確認してください。';
-      alert('カメラを開始できませんでした。\nHTTPSで開いているか、カメラ権限を確認してください。');
+      const name = e && e.name ? e.name : 'UnknownError';
+      statusEl.textContent = `開始できません：${name}`;
+      alert(
+        'カメラを開始できませんでした。\n' +
+        'ChromeでHTTPSのページを開き、カメラ権限を「許可」にしてください。\n\n' +
+        'エラー：' + name
+      );
     }
   }
 
   function stop(){
     running = false;
+    detecting = false;
     if(stream) stream.getTracks().forEach(t => t.stop());
     stream = null;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    tracks = [];
+    clearCanvas();
+    cameraHint.textContent = '人物検出：停止中';
     statusEl.textContent = '停止しました。';
   }
+
   startBtn.onclick = start;
   stopBtn.onclick = stop;
 
-  function distance(a,b){
-    return Math.hypot(a.x-b.x, a.y-b.y);
+  function clearCanvas(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
   }
 
-  function trackPeople(dets, now){
-    const lineY = video.videoHeight * (Number(lineRange.value)/100);
-    const used = new Set();
+  function resizeCanvas(){
+    if(video.videoWidth && video.videoHeight &&
+       (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight)){
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+  }
+
+  function personPoint(det){
+    const [x,y,w,h] = det.bbox;
+
+    // V1:
+    // 正面・斜め正面は「足元（バウンディングボックス下端中央）」で判定。
+    // 横向きは体の中央高さ寄りの中心点で左右通過を判定。
+    if(mode.value === 'side'){
+      return {x:x+w/2, y:y+h*0.65};
+    }
+    return {x:x+w/2, y:y+h};
+  }
+
+  function normalizedDistance(a,b){
+    const diag = Math.hypot(canvas.width || 1, canvas.height || 1);
+    return Math.hypot(a.x-b.x, a.y-b.y) / diag;
+  }
+
+  function matchThresholdFor(det){
+    const [, , w, h] = det.bbox;
+    const scale = Math.max(w,h) / Math.max(canvas.width || 1, canvas.height || 1);
+    return Math.max(0.045, Math.min(0.18, scale * 0.95));
+  }
+
+  function updateTracks(dets, now){
+    const usedTrackIds = new Set();
 
     for(const det of dets){
-      const [x,y,w,h] = det.bbox;
-      const c = {x:x+w/2, y:y+h/2};
-      let best = null, bestD = Infinity;
+      const point = personPoint(det);
+      let best = null;
+      let bestScore = Infinity;
+      const threshold = matchThresholdFor(det);
 
       for(const tr of tracks){
-        if(used.has(tr.id)) continue;
-        const d = distance(c, tr.center);
-        if(d < bestD && d < MATCH_DISTANCE){ best = tr; bestD = d; }
+        if(usedTrackIds.has(tr.id)) continue;
+
+        const d = normalizedDistance(point, tr.point);
+
+        // サイズ変化の大きい正面移動でも追跡しやすいように、
+        // 距離が一定範囲なら同一候補にする。
+        if(d < threshold && d < bestScore){
+          best = tr;
+          bestScore = d;
+        }
       }
 
       if(!best){
         best = {
-          id:nextId++, center:c, prev:c, lastSeen:now, lastCross:0,
-          bbox:det.bbox
+          id: nextId++,
+          point,
+          prevPoint: point,
+          bbox: det.bbox,
+          lastSeen: now,
+          lastCross: 0,
+          age: 0
         };
         tracks.push(best);
-      } else {
-        used.add(best.id);
-        best.prev = best.center;
-        best.center = c;
+      }else{
+        usedTrackIds.add(best.id);
+        best.prevPoint = best.point;
+        best.point = point;
         best.bbox = det.bbox;
         best.lastSeen = now;
+        best.age += 1;
       }
 
-      const prevSide = best.prev.y < lineY ? -1 : 1;
-      const currSide = best.center.y < lineY ? -1 : 1;
-      if(prevSide !== currSide && now - best.lastCross > COOLDOWN){
-        const movingDown = best.center.y > best.prev.y;
-        let kind;
-        if(direction.value === 'down') kind = movingDown ? 'in' : 'out';
-        else kind = movingDown ? 'out' : 'in';
-        addEvent(kind);
-        best.lastCross = now;
-      }
+      maybeCountCross(best, now);
     }
 
-    tracks = tracks.filter(t => now - t.lastSeen < TRACK_TTL);
+    tracks = tracks.filter(t => now - t.lastSeen < TRACK_TTL_MS);
+  }
+
+  function maybeCountCross(tr, now){
+    // 新規検出直後のノイズで数えない
+    if(tr.age < 2) return;
+    if(now - tr.lastCross < CROSS_COOLDOWN_MS) return;
+
+    const linePos = Number(lineRange.value) / 100;
+
+    if(mode.value === 'side'){
+      const lineX = canvas.width * linePos;
+      const prevSide = tr.prevPoint.x < lineX ? -1 : 1;
+      const currSide = tr.point.x < lineX ? -1 : 1;
+
+      if(prevSide !== currSide){
+        const movingRight = tr.point.x > tr.prevPoint.x;
+
+        let kind;
+        if(direction.value === 'right') kind = movingRight ? 'in' : 'out';
+        else kind = movingRight ? 'out' : 'in';
+
+        addLog(kind, false, false);
+        tr.lastCross = now;
+      }
+
+    }else{
+      const lineY = canvas.height * linePos;
+      const prevSide = tr.prevPoint.y < lineY ? -1 : 1;
+      const currSide = tr.point.y < lineY ? -1 : 1;
+
+      if(prevSide !== currSide){
+        const movingNear = tr.point.y > tr.prevPoint.y;
+
+        let kind;
+        if(direction.value === 'near') kind = movingNear ? 'in' : 'out';
+        else kind = movingNear ? 'out' : 'in';
+
+        addLog(kind, false, false);
+        tr.lastCross = now;
+      }
+    }
   }
 
   function draw(dets){
-    if(canvas.width !== video.videoWidth || canvas.height !== video.videoHeight){
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    }
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.lineWidth = 3;
+    resizeCanvas();
+    clearCanvas();
+
+    if(!canvas.width || !canvas.height) return;
+
+    ctx.lineWidth = 4;
     ctx.font = '18px sans-serif';
 
-    const lineY = canvas.height * (Number(lineRange.value)/100);
+    const linePos = Number(lineRange.value) / 100;
+
     ctx.strokeStyle = '#f59e0b';
-    ctx.beginPath(); ctx.moveTo(0,lineY); ctx.lineTo(canvas.width,lineY); ctx.stroke();
+    ctx.fillStyle = '#f59e0b';
+
+    if(mode.value === 'side'){
+      const x = canvas.width * linePos;
+      ctx.beginPath();
+      ctx.moveTo(x,0);
+      ctx.lineTo(x,canvas.height);
+      ctx.stroke();
+      ctx.fillText('判定ライン', Math.min(x+8, canvas.width-100), 28);
+    }else{
+      const y = canvas.height * linePos;
+      ctx.beginPath();
+      ctx.moveTo(0,y);
+      ctx.lineTo(canvas.width,y);
+      ctx.stroke();
+      ctx.fillText('判定ライン', Math.max(8,canvas.width-115), Math.max(24,y-10));
+    }
 
     for(const det of dets){
       const [x,y,w,h] = det.bbox;
+      const p = personPoint(det);
+
       ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth = 3;
       ctx.strokeRect(x,y,w,h);
+
       ctx.fillStyle = '#22c55e';
       ctx.fillText(`人 ${Math.round(det.score*100)}%`, x+4, Math.max(20,y-6));
+
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,7,0,Math.PI*2);
+      ctx.fill();
     }
   }
 
   async function loop(ts){
     if(!running) return;
     requestAnimationFrame(loop);
-    if(!model || video.readyState < 2 || ts - lastDetect < DETECT_MS) return;
-    lastDetect = ts;
+
+    if(
+      detecting ||
+      !model ||
+      video.readyState < 2 ||
+      ts - lastDetectAt < DETECT_INTERVAL_MS
+    ) return;
+
+    lastDetectAt = ts;
+    detecting = true;
+
     try{
       const preds = await model.detect(video, 20);
       const threshold = Number(scoreRange.value)/100;
-      const people = preds.filter(p => p.class === 'person' && p.score >= threshold);
+
+      const people = preds.filter(
+        p => p.class === 'person' && p.score >= threshold
+      );
+
       draw(people);
-      trackPeople(people, performance.now());
-      statusEl.textContent = `カウント中：画面内 ${people.length}人検出`;
+      updateTracks(people, performance.now());
+
+      cameraHint.textContent = `人物検出：${people.length}人`;
+      statusEl.textContent =
+        `カウント中｜${modeText()}｜画面内 ${people.length}人検出`;
+
     }catch(e){
       console.error(e);
       statusEl.textContent = 'AI処理でエラーが発生しました。';
+    }finally{
+      detecting = false;
     }
   }
 
+  applyStateToUI();
   render();
+  draw([]);
+
   loadModel().catch(e => {
     console.error(e);
-    statusEl.textContent = 'AIモデルを読み込めません。ネット接続を確認してください。';
+    statusEl.textContent =
+      'AIモデルを読み込めません。インターネット接続を確認してください。';
   });
 })();
 </script>
