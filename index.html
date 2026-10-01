@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0f172a" />
-  <title>さとのわ 小規模カウンター V1</title>
+  <title>ひとかぞえ V1.1｜3時間計測対応</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
@@ -67,6 +67,13 @@
       font-size:12px;color:#cbd5e1;background:#0b1220;padding:8px;border-radius:10px;margin-top:8px
     }
     .summary-empty{color:var(--muted);font-size:13px}
+    .runtime{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+    .runtime .card{border:1px solid #334155}
+    .runtime-value{font-weight:750;font-size:20px;margin-top:4px}
+    .alert{margin-top:10px;background:#451a1a;border:1px solid #ef4444;
+      color:#fee2e2;padding:12px;border-radius:12px;line-height:1.5;font-size:14px}
+    [hidden]{display:none!important}
+    button:disabled{opacity:.55;cursor:not-allowed}
     @media(max-width:560px){
       .num{font-size:28px}
       .wrap{padding:8px}
@@ -75,7 +82,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>さとのわ 小規模カウンター <span class="badge">V1</span></h1>
+  <h1>ひとかぞえ <span class="badge">V1.1｜3時間計測</span></h1>
 
   <div class="panel">
     <div class="field">
@@ -106,6 +113,12 @@
     <div class="card"><div class="label">現在推定</div><div id="insideCount" class="num">0</div></div>
   </div>
 
+  <div class="runtime">
+    <div class="card"><div class="label">今回の計測時間</div><div id="elapsedTime" class="runtime-value">00:00:00</div></div>
+    <div class="card"><div class="label">スリープ防止</div><div id="wakeStatus" class="runtime-value">待機中</div></div>
+  </div>
+  <div id="operationWarning" class="alert" role="alert" hidden></div>
+
   <div class="camera">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
@@ -133,6 +146,7 @@
     </div>
 
     <div id="status" class="status">AIモデルを読み込み中です。</div>
+    <div class="tiny">最終保存：<span id="savedAt">未保存</span>（端末内。約10秒ごと＋人数変更時）</div>
   </div>
 
   <div class="panel">
@@ -146,7 +160,7 @@
   </div>
 
   <div class="notice">
-    <strong>V1の方針：</strong>
+    <strong>V1.1の方針：</strong>
     顔認証は行いません。映像や顔画像は保存せず、端末上で人物を検出して、
     通過時刻・入退場・人数だけを保存します。100人程度までの小規模イベントで実証する想定です。
   </div>
@@ -160,7 +174,8 @@
   </div>
 
   <p class="tiny">
-    ※ HTTPS（GitHub Pagesなど）で開いてください。<br>
+    ※ HTTPS（GitHub Pagesなど）で開いてください。計測中はこの画面を開いたまま、電源につないでください。<br>
+    ※ スリープ防止は対応ブラウザのみ。端末の省電力設定や発熱による停止は防げません。<br>
     ※ 人が重なった場合、同じ場所を行き来した場合、暗所では誤差が出ます。<br>
     ※ 実証時は実人数も別に記録し、「実人数－アプリ人数」の誤差を残してください。
   </p>
@@ -192,6 +207,10 @@
   const scoreLabel = $('scoreLabel');
   const statusEl = $('status');
   const cameraHint = $('cameraHint');
+  const elapsedTime = $('elapsedTime');
+  const wakeStatus = $('wakeStatus');
+  const operationWarning = $('operationWarning');
+  const savedAt = $('savedAt');
 
   const STORAGE_KEY = 'satonowa-small-counter-v1';
 
@@ -199,6 +218,18 @@
   let stream = null;
   let running = false;
   let detecting = false;
+  let starting = false;
+  let modelPromise = null;
+  let wakeSentinel = null;
+  let wakeRequest = null;
+  let wakeLastAttempt = 0;
+  let sessionStart = 0;
+  let sessionElapsed = 0;
+  let runtimeTimer = null;
+  let lastDetectionSuccess = 0;
+  let detectErrors = 0;
+  let runToken = 0;
+  let hiddenSince = 0;
 
   let state = loadState();
   let tracks = [];
@@ -217,7 +248,9 @@
       line:68,
       score:50,
       counts:{in:0,out:0},
-      logs:[]
+      logs:[],
+      wasRunning:false,
+      savedTimestamp:0
     };
   }
 
@@ -236,7 +269,13 @@
     state.direction = direction.value;
     state.line = Number(lineRange.value);
     state.score = Number(scoreRange.value);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    state.savedTimestamp = Date.now();
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      savedAt.textContent = new Date(state.savedTimestamp).toLocaleTimeString('ja-JP');
+    }catch(e){
+      showWarning('端末内への保存に失敗しました。空き容量やブラウザ設定を確認し、CSVも保存してください。');
+    }
   }
 
   function setDirectionOptions(){
@@ -244,8 +283,8 @@
 
     if(mode.value === 'side'){
       direction.innerHTML = `
-        <option value="right">左 → 右 が入場</option>
-        <option value="left">右 → 左 が入場</option>
+        <option value="right">入口は右（左 → 右に進む）</option>
+        <option value="left">入口は左（右 → 左に進む）</option>
       `;
       if(['right','left'].includes(current)) direction.value = current;
       else direction.value = 'right';
@@ -254,8 +293,8 @@
         '横向き：人が画面を左右に横切る設置向け。黄色い縦ラインを越えた時に数えます。';
     } else {
       direction.innerHTML = `
-        <option value="near">奥 → 手前 が入場</option>
-        <option value="far">手前 → 奥 が入場</option>
+        <option value="near">入口は手前（カメラに近づく）</option>
+        <option value="far">入口は奥（カメラから離れる）</option>
       `;
       if(['near','far'].includes(current)) direction.value = current;
       else direction.value = 'near';
@@ -378,6 +417,7 @@
     scoreRange.value = state.score ?? 50;
     lineLabel.textContent = lineRange.value;
     scoreLabel.textContent = scoreRange.value;
+    if(state.savedTimestamp) savedAt.textContent = new Date(state.savedTimestamp).toLocaleTimeString('ja-JP');
     setDirectionOptions();
 
     if(state.direction){
@@ -463,61 +503,183 @@
     return '斜め正面';
   }
 
-  async function loadModel(){
-    if(model) return;
+  function showWarning(message){
+    operationWarning.textContent = message;
+    operationWarning.hidden = false;
+  }
+  function clearWarning(){
+    operationWarning.hidden = true;
+    operationWarning.textContent = '';
+  }
+  function formatElapsed(ms){
+    const s = Math.floor(Math.max(0,ms)/1000);
+    return [Math.floor(s/3600),Math.floor(s%3600/60),s%60]
+      .map(v => String(v).padStart(2,'0')).join(':');
+  }
+  function renderElapsed(){
+    elapsedTime.textContent = formatElapsed(running ? Date.now()-sessionStart : sessionElapsed);
+  }
+  function setWakeStatus(message){ wakeStatus.textContent = message; }
+
+  async function requestWakeLock(){
+    if(!('wakeLock' in navigator)){
+      setWakeStatus('非対応');
+      showWarning('このブラウザは画面スリープ防止に対応していません。端末側の画面消灯設定を長めにして、計測中は画面を開いたままにしてください。');
+      return;
+    }
+    if(document.visibilityState !== 'visible') return;
+    if(wakeSentinel && !wakeSentinel.released) return;
+    if(wakeRequest) return wakeRequest;
+    wakeLastAttempt = Date.now();
+    wakeRequest = navigator.wakeLock.request('screen')
+      .then(sentinel => {
+        wakeSentinel = sentinel;
+        setWakeStatus('有効');
+        sentinel.addEventListener('release', () => {
+          if(wakeSentinel === sentinel) wakeSentinel = null;
+          if(running){
+            setWakeStatus('解除されました');
+            if(document.visibilityState === 'visible')
+              showWarning('画面スリープ防止が解除されました。端末の省電力設定・電源接続を確認してください。');
+          }else setWakeStatus('停止中');
+        });
+      })
+      .catch(e => {
+        console.warn('Wake Lock unavailable:', e);
+        setWakeStatus('利用できません');
+        showWarning('スリープ防止を有効にできません。計測中はスマホの画面を消さず、省電力設定を確認してください。');
+      })
+      .finally(() => { wakeRequest = null; });
+    return wakeRequest;
+  }
+  async function releaseWakeLock(){
+    if(!wakeSentinel) return;
+    const sentinel = wakeSentinel;
+    wakeSentinel = null;
+    try{ await sentinel.release(); }catch(e){ console.warn(e); }
+  }
+
+  function healthTick(){
+    renderElapsed();
+    if(!running) return;
+    // 10秒ごとに時刻・集計を保存。入場/退出時はその都度保存済み。
+    if(!state.savedTimestamp || Date.now() - state.savedTimestamp >= 10000) saveState();
+    if(document.visibilityState !== 'visible') return;
+    if(stream && stream.getVideoTracks().some(t => t.readyState !== 'live')){
+      showWarning('カメラが停止しました。計測できていません。「停止」→「カウント開始」で再開してください。');
+    }else if(video.paused || video.readyState < 2){
+      showWarning('カメラ映像が止まっています。画面とカメラ権限を確認してください。');
+    }else if(lastDetectionSuccess && Date.now()-lastDetectionSuccess > 15000){
+      showWarning('AIによる人物検出が15秒以上止まっています。計測が途切れた可能性があります。');
+    }
+    // 画面復帰後などにブラウザがWake Lockを解除した場合は再取得を試行。
+    if('wakeLock' in navigator && !wakeSentinel && !wakeRequest && Date.now()-wakeLastAttempt > 15000)
+      void requestWakeLock();
+  }
+
+  let loadPromise = null;
+  function loadModel(){
+    if(model) return Promise.resolve(model);
+    if(loadPromise) return loadPromise;
     statusEl.textContent = 'AIモデル読み込み中…';
-    model = await cocoSsd.load({base:'lite_mobilenet_v2'});
-    statusEl.textContent = 'AI準備完了。「カウント開始」を押してください。';
+    loadPromise = cocoSsd.load({base:'lite_mobilenet_v2'})
+      .then(m => {
+        model = m;
+        if(!running && !starting)
+          statusEl.textContent = 'AI準備完了。「カウント開始」を押してください。';
+        return m;
+      })
+      .catch(e => { loadPromise = null; throw e; });
+    return loadPromise;
   }
 
   async function start(){
+    if(running || starting) return;
+    starting = true;
+    startBtn.disabled = true;
+    clearWarning();
     try{
-      if(running) return;
-
+      // 「開始」タップ直後にスリープ防止を要求する。
+      await requestWakeLock();
       statusEl.textContent = 'カメラを起動しています…';
-
       stream = await navigator.mediaDevices.getUserMedia({
-        video:{
-          facingMode:{ideal:'environment'},
-          width:{ideal:1280},
-          height:{ideal:720}
-        },
+        video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} },
         audio:false
       });
-
+      stream.getVideoTracks().forEach(t => {
+        t.addEventListener('ended', () => {
+          if(running) showWarning('カメラが停止しました。停止してからカウントを再開してください。');
+        });
+      });
       video.srcObject = stream;
       await video.play();
-
       await loadModel();
-
       running = true;
+      sessionStart = Date.now();
+      sessionElapsed = 0;
+      lastDetectionSuccess = Date.now();
+      detectErrors = 0;
       tracks = [];
       nextId = 1;
-      statusEl.textContent = 'カウント中です。人物が判定ラインを越えると記録します。';
+      runToken++;
+      state.wasRunning = true;
+      saveState();
+      runtimeTimer = setInterval(healthTick, 1000);
+      renderElapsed();
+      statusEl.textContent = 'カウント中。3時間計測中はこの画面を開いたままにしてください。';
       requestAnimationFrame(loop);
-
     }catch(e){
       console.error(e);
       const name = e && e.name ? e.name : 'UnknownError';
       statusEl.textContent = `開始できません：${name}`;
-      alert(
-        'カメラを開始できませんでした。\n' +
-        'ChromeでHTTPSのページを開き、カメラ権限を「許可」にしてください。\n\n' +
-        'エラー：' + name
-      );
+      showWarning('開始に失敗しました。HTTPS・カメラ許可・インターネット接続を確認してください（'+name+'）。');
+      if(stream) stream.getTracks().forEach(t => t.stop());
+      stream = null;
+      void releaseWakeLock();
+    }finally{
+      starting = false;
+      startBtn.disabled = running;
     }
   }
 
   function stop(){
+    if(running) sessionElapsed = Date.now()-sessionStart;
     running = false;
     detecting = false;
+    runToken++;
+    if(runtimeTimer){ clearInterval(runtimeTimer); runtimeTimer = null; }
     if(stream) stream.getTracks().forEach(t => t.stop());
     stream = null;
+    video.srcObject = null;
     tracks = [];
+    state.wasRunning = false;
+    saveState();
+    void releaseWakeLock();
+    setWakeStatus('停止中');
     clearCanvas();
+    renderElapsed();
     cameraHint.textContent = '人物検出：停止中';
-    statusEl.textContent = '停止しました。';
+    statusEl.textContent = '停止しました。計測結果は端末内に保存されています。';
+    clearWarning();
+    startBtn.disabled = false;
   }
+
+  document.addEventListener('visibilitychange', () => {
+    if(!running) return;
+    if(document.visibilityState === 'hidden'){
+      hiddenSince = Date.now();
+      saveState();
+    }else{
+      if(hiddenSince && Date.now()-hiddenSince >= 2000)
+        showWarning('画面が非表示になっていました。その間の通過人数は記録できていない可能性があります。');
+      hiddenSince = 0;
+      if(video.paused) video.play().catch(() =>
+        showWarning('カメラ映像を再開できません。「停止」→「カウント開始」を押してください。'));
+      void requestWakeLock();
+      healthTick();
+    }
+  });
+  window.addEventListener('pagehide', () => { if(running) saveState(); });
 
   startBtn.onclick = start;
   stopBtn.onclick = stop;
@@ -695,6 +857,7 @@
 
   async function loop(ts){
     if(!running) return;
+    const token = runToken;
     requestAnimationFrame(loop);
 
     if(
@@ -709,6 +872,7 @@
 
     try{
       const preds = await model.detect(video, 20);
+      if(!running || token !== runToken) return;
       const threshold = Number(scoreRange.value)/100;
 
       const people = preds.filter(
@@ -717,6 +881,8 @@
 
       draw(people);
       updateTracks(people, performance.now());
+      lastDetectionSuccess = Date.now();
+      detectErrors = 0;
 
       cameraHint.textContent = `人物検出：${people.length}人`;
       statusEl.textContent =
@@ -724,15 +890,22 @@
 
     }catch(e){
       console.error(e);
+      detectErrors++;
       statusEl.textContent = 'AI処理でエラーが発生しました。';
+      if(detectErrors >= 3)
+        showWarning('人物検出で繰り返しエラーが発生しています。「停止」→「カウント開始」で再開してください。');
     }finally{
       detecting = false;
     }
   }
 
+  const interrupted = !!state.wasRunning;
+  state.wasRunning = false;
   applyStateToUI();
   render();
   draw([]);
+  if(interrupted)
+    showWarning('前回の計測が途中で終了しています。最後に保存された人数は残っていますが、停止中の人数は記録されていません。「カウント開始」で再開してください。');
 
   loadModel().catch(e => {
     console.error(e);
